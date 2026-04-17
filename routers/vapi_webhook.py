@@ -176,14 +176,25 @@ async def _handle_logic(body: dict, fn: str, params: dict):
             }
 
         if not slots:
-            return {
-                "result": (
-                    f"There are no available slots for {dept['name']} on that date. "
-                    "We're open Monday through Friday, 9 AM to 5 PM Eastern. "
-                    "Would you like to try a different day?"
-                ),
-                "status": "success"
-            }
+            # Give a more specific reason — weekends vs fully booked
+            from pytz import timezone as tz_lookup
+            _tz = tz_lookup(os.getenv("TIMEZONE", "Asia/Kolkata"))
+            _dt = parse_date(date)
+            _dt = _tz.localize(_dt) if _dt.tzinfo is None else _dt
+            if _dt.weekday() >= 5:  # Saturday or Sunday
+                reason = (
+                    f"We are closed on weekends. "
+                    f"{spoken_date} is a {'Saturday' if _dt.weekday() == 5 else 'Sunday'}. "
+                    f"Our clinic is open Monday to Friday, 9 AM to 5 PM IST. "
+                    f"Would you like to book for Monday, {(_dt + __import__('datetime').timedelta(days=(7 - _dt.weekday()))).strftime('%B %d')} instead?"
+                )
+            else:
+                reason = (
+                    f"There are no available slots for {dept['name']} on {spoken_date}. "
+                    f"Our clinic is open Monday to Friday, 9 AM to 5 PM IST. "
+                    f"Would you like to try a different day?"
+                )
+            return {"result": reason, "status": "success"}
 
         slot_list = ", ".join(s["start"] for s in slots[:3])
         logger.info(f"Slots for {dept['name']} on {date}: {slot_list}")
